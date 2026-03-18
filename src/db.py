@@ -3,8 +3,8 @@ import os
 
 #connects to finance data base
 def connect():
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    db_path = os.path.join(base_dir, "db", "finance.db")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(base_dir, "..", "db", "finance.db")
     return sqlite3.connect(db_path)
 
 # call conn=connect() to open a connection to a database

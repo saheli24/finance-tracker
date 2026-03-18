@@ -13,8 +13,6 @@ def add_transaction():
     user_id = input("Enter your user ID from the list above: ")
 
     print("\n--- Add a New Transaction ---")
-    # Ask the user for input
-    user_id = input("Enter your user ID: ")
     amount = input("Enter amount: ")
     category = input("Enter category: ")
     date = input("Enter date (YYYY-MM-DD): ")
@@ -213,6 +211,155 @@ def view_transactions_with_users():
 
     conn.close()
 
+
+def export_transactions_csv(filename="transactions_export.csv"):
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT t.transaction_id, u.name, t.amount, t.category, t.date, t.description
+    FROM transactions t
+    JOIN users u ON t.user_id = u.user_id
+    ORDER BY t.date
+    """)
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("No transactions to export.\n")
+    else:
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["ID", "User", "Amount", "Category", "Date", "Description"])
+            writer.writerows(rows)
+        print(f"Transactions exported to {filename}\n")
+
+    conn.close()
+
+
+def import_transactions_csv(filename="transactions_import.csv"):
+    conn = connect()
+    cursor = conn.cursor()
+
+    try:
+        with open(filename, mode='r') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                # Find user_id by name
+                cursor.execute("SELECT user_id FROM users WHERE name = ?", (row['User'],))
+                result = cursor.fetchone()
+                if result:
+                    user_id = result[0]
+                else:
+                    # If user doesn’t exist, create user
+                    cursor.execute("INSERT INTO users (name, email) VALUES (?, ?)", (row['User'], 'unknown@example.com'))
+                    conn.commit()
+                    user_id = cursor.lastrowid
+
+                cursor.execute("""
+                INSERT INTO transactions (user_id, amount, category, date, description)
+                VALUES (?, ?, ?, ?, ?)
+                """, (user_id, float(row['Amount']), row['Category'], row['Date'], row['Description']))
+
+        conn.commit()
+        print(f"Transactions imported from {filename}\n")
+
+    except FileNotFoundError:
+        print(f"File {filename} not found.\n")
+
+    conn.close()
+
+def search_by_category():
+    category = input("Enter category to search: ")
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT t.transaction_id, u.name, t.amount, t.category, t.date, t.description
+    FROM transactions t
+    JOIN users u ON t.user_id = u.user_id
+    WHERE t.category = ?
+    ORDER BY t.date
+    """, (category,))
+    rows = cursor.fetchall()
+
+    if not rows:
+        print(f"No transactions found in category '{category}'.\n")
+    else:
+        print(f"\n--- Transactions in Category: {category} ---")
+        print(f"{'ID':<3} {'User':<10} {'Amount':<10} {'Category':<10} {'Date':<12} {'Description'}")
+        print("-"*60)
+        for transaction_id, name, amount, category, date, description in rows:
+            print(f"{transaction_id:<3} {name:<10} {amount:<10.2f} {category:<10} {date:<12} {description}")
+        print()
+
+    conn.close()
+
+def search_by_date():
+    start_date = input("Enter start date (YYYY-MM-DD): ")
+    end_date = input("Enter end date (YYYY-MM-DD): ")
+
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT t.transaction_id, u.name, t.amount, t.category, t.date, t.description
+    FROM transactions t
+    JOIN users u ON t.user_id = u.user_id
+    WHERE t.date BETWEEN ? AND ?
+    ORDER BY t.date
+    """, (start_date, end_date))
+    rows = cursor.fetchall()
+
+    if not rows:
+        print(f"No transactions found between {start_date} and {end_date}.\n")
+    else:
+        print(f"\n--- Transactions from {start_date} to {end_date} ---")
+        print(f"{'ID':<3} {'User':<10} {'Amount':<10} {'Category':<10} {'Date':<12} {'Description'}")
+        print("-"*60)
+        for transaction_id, name, amount, category, date, description in rows:
+            print(f"{transaction_id:<3} {name:<10} {amount:<10.2f} {category:<10} {date:<12} {description}")
+        print()
+
+    conn.close()
+
+def search_by_user():
+    list_users()
+    user_id = input("Enter user ID to filter: ")
+
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        print("Invalid user ID.\n")
+        return
+
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT t.transaction_id, u.name, t.amount, t.category, t.date, t.description
+    FROM transactions t
+    JOIN users u ON t.user_id = u.user_id
+    WHERE t.user_id = ?
+    ORDER BY t.date
+    """, (user_id,))
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("No transactions found for this user.\n")
+    else:
+        print(f"\n--- Transactions for User ID: {user_id} ---")
+        print(f"{'ID':<3} {'User':<10} {'Amount':<10} {'Category':<10} {'Date':<12} {'Description'}")
+        print("-"*60)
+        for transaction_id, name, amount, category, date, description in rows:
+            print(f"{transaction_id:<3} {name:<10} {amount:<10.2f} {category:<10} {date:<12} {description}")
+        print()
+
+    conn.close()
+
+
+
+
+
 def menu():
     print("\n--- Finance Tracker ---")
     print("1. Register new user")
@@ -221,7 +368,12 @@ def menu():
     print("4. Total spending per user")
     print("5. Spending by category")
     print("6. Monthly spending summary")
-    print("7. Exit")
+    print("7. Export transactions to CSV")
+    print("8. Import transactions from CSV")
+    print("9. Search by category")
+    print("10. Search by date range")
+    print("11. Search by user")
+    print("12. Exit")
 
 def run():
     while True:
@@ -241,6 +393,16 @@ def run():
         elif choice == "6":
             monthly_spending_summary()
         elif choice == "7":
+            export_transactions_csv()
+        elif choice == "8":
+            import_transactions_csv()
+        elif choice == "9":
+            search_by_category()
+        elif choice == "10":
+            search_by_date()
+        elif choice == "11":
+            search_by_user()
+        elif choice == "12":
             print("Goodbye!")
             break
         else:
